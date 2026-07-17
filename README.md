@@ -186,13 +186,16 @@ end to end.
 
 ## Deploying (Railway)
 
-This is two services from one repo:
+This is two services from one repo, each with its own Railway config file
+at the repo root:
 
-1. **backend** — `railway.json` at the repo root already points Railway at
+1. **backend** — `railway.json` points Railway at
    `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`.
-2. **gateway** — create a second Railway service from the same repo,
-   override its start command to
-   `uvicorn gateway.main:app --host 0.0.0.0 --port $PORT`.
+2. **gateway** — `railway.gateway.json` points Railway at
+   `uvicorn gateway.main:app --host 0.0.0.0 --port $PORT`. Create a second
+   Railway service from the same repo and set its config path to
+   `railway.gateway.json` (Settings → Config-as-code) so it picks this up
+   instead of the default `railway.json`.
 
 Set `DATABASE_URL` (your Supabase connection string) and
 `ANTHROPIC_API_KEY` on both services. Set `GATEWAY_URL` on the backend
