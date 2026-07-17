@@ -9,46 +9,57 @@
 --      audit_log_entries and policy_decision_log. Agents never hold a
 --      connection to this database at all; they only speak HTTP to the
 --      gateway. See gateway/README section in root README.md.
+--
+-- IDs are varchar(36) (not native uuid) and status/decision columns are
+-- varchar (not native Postgres enums) to match shared/db/models.py exactly:
+-- the app generates UUID strings in Python and validates status values at
+-- the application layer, not the database layer. Drop-and-recreate below
+-- is idempotent and safe to re-run.
 
-create extension if not exists "pgcrypto";
-
-create type case_file_status as enum ('open', 'case_ready', 'closed');
-create type artifact_source_type as enum ('document', 'device', 'comms');
-create type triage_flag_status as enum ('pending', 'approved', 'rejected');
-create type report_draft_status as enum ('draft', 'case_ready', 'blocked');
-create type decision_type as enum ('allow', 'deny');
+drop table if exists policy_decision_log cascade;
+drop table if exists audit_log_entries cascade;
+drop table if exists report_drafts cascade;
+drop table if exists timeline_entries cascade;
+drop table if exists triage_flags cascade;
+drop table if exists artifacts cascade;
+drop table if exists case_files cascade;
+drop type if exists case_file_status;
+drop type if exists artifact_source_type;
+drop type if exists triage_flag_status;
+drop type if exists report_draft_status;
+drop type if exists decision_type;
 
 create table case_files (
-    id uuid primary key default gen_random_uuid(),
+    id varchar(36) primary key,
     name text not null,
     created_at timestamptz not null default now(),
-    status case_file_status not null default 'open'
+    status varchar(20) not null default 'open'
 );
 
 create table artifacts (
-    id uuid primary key default gen_random_uuid(),
-    case_file_id uuid not null references case_files(id) on delete cascade,
-    source_type artifact_source_type not null,
+    id varchar(36) primary key,
+    case_file_id varchar(36) not null references case_files(id) on delete cascade,
+    source_type varchar(20) not null,
     raw_content text not null,
     metadata jsonb not null default '{}'::jsonb,
     created_at timestamptz not null default now()
 );
 
 create table triage_flags (
-    id uuid primary key default gen_random_uuid(),
-    artifact_id uuid not null references artifacts(id) on delete cascade,
+    id varchar(36) primary key,
+    artifact_id varchar(36) not null references artifacts(id) on delete cascade,
     rationale text not null,
     confidence_score numeric(4, 3) not null check (confidence_score >= 0 and confidence_score <= 1),
-    status triage_flag_status not null default 'pending',
+    status varchar(20) not null default 'pending',
     reviewed_by text,
     reviewed_at timestamptz,
     created_at timestamptz not null default now()
 );
 
 create table timeline_entries (
-    id uuid primary key default gen_random_uuid(),
-    case_file_id uuid not null references case_files(id) on delete cascade,
-    artifact_id uuid not null references artifacts(id),
+    id varchar(36) primary key,
+    case_file_id varchar(36) not null references case_files(id) on delete cascade,
+    artifact_id varchar(36) not null references artifacts(id),
     event_timestamp timestamptz not null,
     event_description text not null,
     created_by_agent text not null default 'timeline-agent',
@@ -56,23 +67,23 @@ create table timeline_entries (
 );
 
 create table report_drafts (
-    id uuid primary key default gen_random_uuid(),
-    case_file_id uuid not null references case_files(id) on delete cascade,
+    id varchar(36) primary key,
+    case_file_id varchar(36) not null references case_files(id) on delete cascade,
     content text not null,
     citations jsonb not null default '[]'::jsonb, -- [{claim_id, artifact_id, claim_text}]
     citation_coverage_pct numeric(5, 2) not null default 0,
-    status report_draft_status not null default 'draft',
+    status varchar(20) not null default 'draft',
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
 
 create table audit_log_entries (
-    id uuid primary key default gen_random_uuid(),
-    case_file_id uuid references case_files(id) on delete cascade,
+    id varchar(36) primary key,
+    case_file_id varchar(36) references case_files(id) on delete cascade,
     actor text not null, -- agent name | human user identifier
     action text not null,
     target_entity text not null,
-    decision decision_type not null,
+    decision varchar(10) not null,
     reason text,
     request_id text not null,
     timestamp timestamptz not null default now(),
@@ -89,10 +100,10 @@ create table audit_log_entries (
 );
 
 create table policy_decision_log (
-    id uuid primary key default gen_random_uuid(),
+    id varchar(36) primary key,
     policy_name text not null,
     request_summary text not null,
-    decision decision_type not null,
+    decision varchar(10) not null,
     reason text,
     request_id text not null,
     timestamp timestamptz not null default now()
