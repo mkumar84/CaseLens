@@ -52,6 +52,13 @@ async def gateway_client():
 
 @pytest_asyncio.fixture
 async def backend_client():
+    # NOTE: httpx.ASGITransport does not invoke the ASGI lifespan protocol,
+    # so backend.app.main's `lifespan` (init_db + auto-seed-if-empty) never
+    # runs here. Table creation and any seeding for tests come entirely
+    # from `seeded_case_file_id` / `init_db()` calling them directly — this
+    # fixture intentionally does not exercise startup auto-seed. Verified
+    # empirically: swapping in a transport that does run lifespan would
+    # change this.
     from backend.app.main import app as backend_app
 
     transport = ASGITransport(app=backend_app)

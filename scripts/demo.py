@@ -79,16 +79,19 @@ def main() -> None:
 
         client = httpx.Client(timeout=30)
 
-        banner("Step 1 — Seed a synthetic mixed CaseFile")
-        from db.seed_data import ARTIFACTS, CASE_FILE_NAME
+        banner("Step 1 — Synthetic mixed CaseFile")
+        from db.seed_data import ARTIFACTS
 
-        case_file = client.post(f"{BACKEND_URL}/case-files", json={"name": CASE_FILE_NAME}).json()
+        # backend/app/main.py's lifespan auto-seeds one CaseFile on startup
+        # against an empty database (the same behavior the deployed Railway
+        # app relies on so a fresh URL always has demo data ready). Reuse
+        # it here instead of also creating one directly — doing both would
+        # leave two duplicate-looking case files sitting in demo.db.
+        case_files = client.get(f"{BACKEND_URL}/case-files").json()
+        case_file = case_files[0]
         case_file_id = case_file["id"]
-        print(f"Case file: {case_file['name']} ({case_file_id})")
-        # Artifacts are raw seed input, not a human-facing write, so there's
-        # no backend endpoint for them; insert directly, same as scripts/seed.py.
-        _insert_artifacts_direct(env, case_file_id, ARTIFACTS)
-        print(f"Inserted {len(ARTIFACTS)} artifacts (documents, device extraction, comms).")
+        print(f"Case file (auto-seeded on backend startup): {case_file['name']} ({case_file_id})")
+        print(f"{len(ARTIFACTS)} artifacts (documents, device extraction, comms).")
 
         banner("Step 2 — Triage Agent flags investigatively relevant artifacts")
         triage_result = client.post(f"{BACKEND_URL}/agents/triage/run", params={"case_file_id": case_file_id}).json()
@@ -170,38 +173,6 @@ def main() -> None:
         backend_proc.terminate()
         gateway_proc.wait(timeout=10)
         backend_proc.wait(timeout=10)
-
-
-def _insert_artifacts_direct(env: dict, case_file_id: str, artifacts: list[dict]) -> None:
-    """Seed-only helper: artifacts are raw case input, not produced through
-    the API, so this writes them directly — mirrors scripts/seed.py."""
-    import asyncio
-
-    os.environ["DATABASE_URL"] = env["DATABASE_URL"]
-    import importlib
-
-    import shared.config
-    import shared.db.session
-
-    importlib.reload(shared.config)
-    importlib.reload(shared.db.session)
-    from shared.db.models import Artifact
-    from shared.db.session import session_scope
-
-    async def _run():
-        async with session_scope() as session:
-            for artifact in artifacts:
-                session.add(
-                    Artifact(
-                        case_file_id=case_file_id,
-                        source_type=artifact["source_type"],
-                        raw_content=artifact["raw_content"],
-                        artifact_metadata=artifact["metadata"],
-                    )
-                )
-            await session.commit()
-
-    asyncio.run(_run())
 
 
 def _tamper_first_audit_row(env: dict) -> None:
