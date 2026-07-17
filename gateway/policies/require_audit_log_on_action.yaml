@@ -1,0 +1,13 @@
+apiVersion: agentgateway.io/v1
+kind: AgentgatewayPolicy
+metadata:
+  name: require-audit-log-on-action
+spec:
+  target:
+    action: "*"
+  rule:
+    cel: "audit_log.entry_created_for(request.id) == true"
+  onDeny:
+    reason: "Action could not be verified as logged; action rolled back."
+    log: true
+    rollbackOnDeny: true
