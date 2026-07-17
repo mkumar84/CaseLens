@@ -127,10 +127,17 @@ Both are optional for local development:
 
 ## Running it
 
+The backend auto-seeds one synthetic CaseFile on startup if the database is
+empty (`backend/app/main.py`'s `lifespan`), so a fresh deploy — including
+the live Railway URL — always has demo data with zero manual steps. It only
+fires against a genuinely empty database, so redeploying against an
+already-seeded one doesn't create duplicates. Manual seeding is still
+available if you want it explicitly:
+
 ```bash
 python -m scripts.seed                                        # seed one CaseFile, 18 artifacts
 uvicorn gateway.main:app --port 8001 &
-uvicorn backend.app.main:app --port 8000 &
+uvicorn backend.app.main:app --port 8000 &                     # also auto-seeds if the DB is empty
 ```
 
 Then either drive it through the API (see below) or run the scripted
@@ -169,6 +176,13 @@ Claude API latency if a key is set).
 | `POST` | `/agents/report/run?case_file_id=` | run (compliant) Report Agent |
 | `POST` | `/agents/report/run-misbehaving?case_file_id=` | run the noncompliant variant + attempt case_ready |
 | `POST` | `/agents/report/{id}/request-case-ready` | request the case_ready transition |
+| `POST` | `/dev/seed` | seed another case file on demand (demo-only, see below) |
+
+`/dev/seed` is a portfolio-demo convenience, not a production pattern —
+unauthenticated and unrate-limited. It's there so a demo run-through can be
+reset to a clean state (a fresh set of `pending` flags to approve/reject)
+without a full redeploy; it adds a new case file rather than overwriting,
+so it's safe to call repeatedly.
 
 ## Tests
 
@@ -202,7 +216,10 @@ Set `DATABASE_URL` (your Supabase connection string) and
 service to the gateway service's internal Railway URL. Apply
 `db/schema.sql` to your Supabase project before first run (or let the
 SQLite fallback create tables automatically for a quick smoke test without
-Supabase configured).
+Supabase configured). No manual seeding step is required — the backend
+auto-seeds the demo CaseFile on first boot against an empty database (see
+"Running it" above); `POST /dev/seed` is there if you want to reset to a
+clean run-through afterward.
 
 ## Explicitly out of scope
 
