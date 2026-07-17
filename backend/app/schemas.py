@@ -76,6 +76,9 @@ class AuditLogEntryOut(BaseModel):
     reason: str | None
     request_id: str
     timestamp: datetime
+    seq: int
+    prev_hash: str
+    entry_hash: str
 
 
 class PolicyDecisionLogOut(BaseModel):

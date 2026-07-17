@@ -88,6 +88,14 @@ class AuditLogEntry(Base):
     request_id: Mapped[str] = mapped_column(String(64))
     timestamp: Mapped[datetime] = mapped_column(default=utcnow)
 
+    # Tamper-evident hash chain (PRD Goal #4). seq is the append order;
+    # entry_hash binds this row to every row before it via prev_hash, so an
+    # edit to any historical row breaks the chain from that point forward.
+    # See shared/audit_chain.py for how these are computed and verified.
+    seq: Mapped[int] = mapped_column(unique=True)
+    prev_hash: Mapped[str] = mapped_column(String(64))
+    entry_hash: Mapped[str] = mapped_column(String(64), unique=True)
+
 
 class PolicyDecisionLog(Base):
     __tablename__ = "policy_decision_log"

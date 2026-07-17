@@ -153,6 +153,15 @@ def main() -> None:
         for row in audit_rows[-8:]:
             print(f"  {row['actor']:20s} {row['action']:28s} {row['decision']:6s} {row['reason'] or ''}")
 
+        banner("Step 10 — Tamper-evident audit log (PRD Goal #4)")
+        clean = client.get(f"{BACKEND_URL}/audit-log/verify").json()
+        print(f"Chain verify before tampering: valid={clean['valid']}, checked={clean['checked']} entries")
+        print("Simulating a post-hoc tamper: editing one persisted audit row's 'reason' directly in the DB...")
+        _tamper_first_audit_row(env)
+        tampered = client.get(f"{BACKEND_URL}/audit-log/verify").json()
+        print(f"Chain verify after tampering:  valid={tampered['valid']}, broken_at_seq={tampered['broken_at_seq']}")
+        assert clean["valid"] is True and tampered["valid"] is False, "tamper detection should have fired"
+
         elapsed = time.monotonic() - start
         banner(f"Demo complete in {elapsed:.1f}s")
 
@@ -190,6 +199,29 @@ def _insert_artifacts_direct(env: dict, case_file_id: str, artifacts: list[dict]
                         artifact_metadata=artifact["metadata"],
                     )
                 )
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def _tamper_first_audit_row(env: dict) -> None:
+    """Demo-only: mutates a persisted AuditLogEntry directly in the DB,
+    bypassing shared/audit_chain.py entirely, to show the hash chain
+    catching a tamper attempt that never went through the appender."""
+    import asyncio
+
+    os.environ["DATABASE_URL"] = env["DATABASE_URL"]
+    from sqlalchemy import select
+
+    from shared.db.models import AuditLogEntry
+    from shared.db.session import session_scope
+
+    async def _run():
+        async with session_scope() as session:
+            row = (
+                await session.execute(select(AuditLogEntry).order_by(AuditLogEntry.seq).limit(1))
+            ).scalar_one()
+            row.reason = "tampered after the fact"
             await session.commit()
 
     asyncio.run(_run())

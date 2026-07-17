@@ -30,7 +30,8 @@ import celpy
 
 from gateway.audit_agent import AuditLoggingFailed, entry_exists_for_request, log_action
 from gateway.policy_engine import engine
-from shared.db.models import AuditLogEntry, PolicyDecisionLog
+from shared.audit_chain import append_entry
+from shared.db.models import PolicyDecisionLog
 from shared.db.session import SessionLocal
 
 AUDIT_COMPLETENESS_POLICY = "require-audit-log-on-action"
@@ -164,16 +165,15 @@ async def _record_rollback(request_id: str, request_summary: str) -> None:
                     request_id=request_id,
                 )
             )
-            session.add(
-                AuditLogEntry(
-                    case_file_id=None,
-                    actor="agentgateway",
-                    action="rollback",
-                    target_entity=request_id,
-                    decision="deny",
-                    reason=engine.reason(AUDIT_COMPLETENESS_POLICY),
-                    request_id=request_id,
-                )
+            await append_entry(
+                session,
+                case_file_id=None,
+                actor="agentgateway",
+                action="rollback",
+                target_entity=request_id,
+                decision="deny",
+                reason=engine.reason(AUDIT_COMPLETENESS_POLICY),
+                request_id=request_id,
             )
 
 

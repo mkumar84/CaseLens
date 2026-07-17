@@ -1,8 +1,9 @@
 # CaseLens Backend
 
 Four Claude Sonnet agents (Triage, Timeline, Report, Audit), a real
-CEL-policy control plane sitting between them, and an append-only audit
-trail — built to be consumed by a Lovable frontend over REST.
+CEL-policy control plane sitting between them, and a tamper-evident,
+hash-chained audit trail — built to be consumed by a Lovable frontend over
+REST.
 
 ## The property this build is trying to prove
 
@@ -88,6 +89,25 @@ the same schema, portable between SQLite (local/dev/test) and Postgres
 for that portability; `db/schema.sql` remains the source of truth for what
 actually gets applied to Supabase.
 
+### Tamper-evident audit log
+
+`CaseLens-PRD.md` states this as Goal #4, not just a nice-to-have, and its
+Open Questions section calls out a SHA-256 hash chain specifically. Every
+`AuditLogEntry` — from the gateway's Audit Agent, from the rollback
+recorder, and from the backend's human-review endpoint — is appended
+through the single function in `shared/audit_chain.py`, never constructed
+ad hoc: `entry_hash = sha256(seq, prev_hash, id, case_file_id, actor,
+action, target_entity, decision, reason, request_id)`. Editing, deleting,
+or reordering any historical row breaks every hash computed after it.
+`GET /audit-log/verify` walks the whole chain and reports the first broken
+`seq` if one exists; `scripts/demo.py` step 10 tampers with a row directly
+in the DB (bypassing the appender) and shows verification flip from
+`valid: true` to `valid: false` live.
+
+This is the "Prove it, don't assume it" beat from the PRD's Frame-Prove-Earn
+mapping made concrete: rather than asserting the audit log is trustworthy,
+the demo shows a tamper attempt getting caught.
+
 ## Setup
 
 ```bash
@@ -126,7 +146,8 @@ the app. It runs normal triage → human approves most flags and **rejects
 one** → a simulated Timeline Agent bypass attempt against the rejected
 artifact (denied by Policy 1) → Timeline Agent → a compliant Report Agent
 reaching `case_ready` → the deliberately-noncompliant Report Agent blocked
-by Policy 2 → a summary of `PolicyDecisionLog` and `AuditLogEntry`. Runs in
+by Policy 2 → a summary of `PolicyDecisionLog` and `AuditLogEntry` → a live
+tamper attempt on the audit log getting caught by the hash chain. Runs in
 well under 5 minutes (a few seconds against the offline heuristics; mostly
 Claude API latency if a key is set).
 
@@ -141,6 +162,7 @@ Claude API latency if a key is set).
 | `GET` | `/timeline-entries?case_file_id=` | list timeline |
 | `GET` | `/report-drafts?case_file_id=` | list report drafts |
 | `GET` | `/audit-log?case_file_id=` | audit trail |
+| `GET` | `/audit-log/verify` | walk the hash chain, report tampering if any |
 | `GET` | `/policy-decisions?policy_name=&decision=` | gateway decision log |
 | `POST` | `/agents/triage/run?case_file_id=` | run Triage Agent |
 | `POST` | `/agents/timeline/run?case_file_id=` | run Timeline Agent |
@@ -157,8 +179,10 @@ python -m pytest
 `tests/test_acceptance.py` maps directly onto the CLAUDE.md checklist:
 Policy 1 bypass denial (pending *and* rejected flags), Policy 2 blocking
 the deliberately-noncompliant Report Agent, Policy 3's audit-failure
-rollback (proving a rolled-back mutation leaves no row behind), and the
-full pipeline run through the real agent modules end to end.
+rollback (proving a rolled-back mutation leaves no row behind), the audit
+hash chain verifying clean after normal activity and catching a direct
+database tamper, and the full pipeline run through the real agent modules
+end to end.
 
 ## Deploying (Railway)
 

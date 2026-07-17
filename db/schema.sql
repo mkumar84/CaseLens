@@ -75,7 +75,17 @@ create table audit_log_entries (
     decision decision_type not null,
     reason text,
     request_id text not null,
-    timestamp timestamptz not null default now()
+    timestamp timestamptz not null default now(),
+    -- Tamper-evident hash chain (PRD Goal #4). Application-assigned (not a
+    -- DB serial/identity) so the same appender logic works unchanged on
+    -- SQLite in dev/test. entry_hash = sha256(seq, prev_hash, id,
+    -- case_file_id, actor, action, target_entity, decision, reason,
+    -- request_id) — see shared/audit_chain.py. The unique constraint on
+    -- seq turns a concurrent double-append into an immediate DB error
+    -- rather than a silently forked chain.
+    seq bigint not null unique,
+    prev_hash char(64) not null,
+    entry_hash char(64) not null unique
 );
 
 create table policy_decision_log (

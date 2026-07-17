@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.deps import get_session
 from backend.app.schemas import ReviewTriageFlagRequest, TriageFlagOut
-from shared.db.models import Artifact, AuditLogEntry, TriageFlag
+from shared.audit_chain import append_entry
+from shared.db.models import Artifact, TriageFlag
 
 router = APIRouter(prefix="/triage-flags", tags=["triage"])
 
@@ -30,8 +32,8 @@ async def review_triage_flag(
 ):
     """Human-only action: approve or reject a Triage Agent proposal. Not
     routed through the gateway (this isn't an agent action), but still
-    recorded to AuditLogEntry directly for traceability in the demo's
-    decision trail.
+    appended to the same tamper-evident audit chain (shared/audit_chain.py)
+    for traceability in the demo's decision trail.
     """
     if req.decision not in ("approved", "rejected"):
         raise HTTPException(status_code=400, detail="decision must be 'approved' or 'rejected'")
@@ -45,16 +47,15 @@ async def review_triage_flag(
     flag.reviewed_at = datetime.now(timezone.utc)
 
     artifact = await session.get(Artifact, flag.artifact_id)
-    session.add(
-        AuditLogEntry(
-            case_file_id=artifact.case_file_id if artifact else None,
-            actor=req.reviewed_by,
-            action=f"human-{req.decision}-triage-flag",
-            target_entity=f"triage_flag:{flag_id}",
-            decision="allow",
-            reason=None,
-            request_id=f"human-review-{flag_id}",
-        )
+    await append_entry(
+        session,
+        case_file_id=artifact.case_file_id if artifact else None,
+        actor=req.reviewed_by,
+        action=f"human-{req.decision}-triage-flag",
+        target_entity=f"triage_flag:{flag_id}",
+        decision="allow",
+        reason=None,
+        request_id=f"human-review-{flag_id}-{uuid.uuid4()}",
     )
 
     await session.commit()

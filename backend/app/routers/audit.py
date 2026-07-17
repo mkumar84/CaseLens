@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.deps import get_session
 from backend.app.schemas import AuditLogEntryOut, PolicyDecisionLogOut
+from shared.audit_chain import verify_chain
 from shared.db.models import AuditLogEntry, PolicyDecisionLog
 
 router = APIRouter(tags=["audit"])
@@ -11,11 +12,18 @@ router = APIRouter(tags=["audit"])
 
 @router.get("/audit-log", response_model=list[AuditLogEntryOut])
 async def list_audit_log(case_file_id: str | None = None, session: AsyncSession = Depends(get_session)):
-    query = select(AuditLogEntry).order_by(AuditLogEntry.timestamp)
+    query = select(AuditLogEntry).order_by(AuditLogEntry.seq)
     if case_file_id:
         query = query.where(AuditLogEntry.case_file_id == case_file_id)
     rows = (await session.execute(query)).scalars().all()
     return rows
+
+
+@router.get("/audit-log/verify")
+async def verify_audit_log(session: AsyncSession = Depends(get_session)):
+    """Walks the full hash chain and confirms no entry has been altered
+    since it was written — the tamper-evidence proof for PRD Goal #4."""
+    return await verify_chain(session)
 
 
 @router.get("/policy-decisions", response_model=list[PolicyDecisionLogOut])

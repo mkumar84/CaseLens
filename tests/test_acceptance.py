@@ -244,6 +244,62 @@ async def test_policy_decision_log_has_explainable_denials(gateway_client, backe
     assert all(r["reason"] for r in denial_rows)
 
 
+async def test_audit_chain_verifies_clean_after_normal_activity(
+    wire_agents_to_gateway, backend_client, seeded_case_file_id
+):
+    """PRD Goal #4: the audit log must be tamper-evident. After ordinary
+    pipeline activity (which already appends many entries from multiple
+    writers — the gateway's Audit Agent and the backend's human-review
+    endpoint), the hash chain must verify clean."""
+    from agents import triage_agent
+
+    flags = await triage_agent.run(seeded_case_file_id)
+    for flag in flags:
+        await backend_client.post(
+            f"/triage-flags/{flag['id']}/review",
+            json={"decision": "approved", "reviewed_by": "test-reviewer"},
+        )
+
+    result = await backend_client.get("/audit-log/verify")
+    body = result.json()
+    assert body["valid"] is True
+    assert body["checked"] > 0
+    assert body["broken_at_seq"] is None
+
+
+async def test_audit_chain_detects_tampering(gateway_client, backend_client, seeded_case_file_id):
+    """Directly mutating a persisted AuditLogEntry (simulating a
+    post-hoc tamper attempt, bypassing the appender entirely) must be
+    caught by verify_chain, pinpointing the first broken entry."""
+    from shared.db.models import AuditLogEntry
+
+    artifact_id = await _get_first_artifact_id(seeded_case_file_id)
+    await gateway_client.post(
+        "/gateway/triage/create-flag",
+        json={
+            "case_file_id": seeded_case_file_id,
+            "artifact_id": artifact_id,
+            "rationale": "original rationale",
+            "confidence_score": 0.5,
+        },
+    )
+
+    clean = await backend_client.get("/audit-log/verify")
+    assert clean.json()["valid"] is True
+
+    async with SessionLocal() as session:
+        rows = (await session.execute(select(AuditLogEntry).order_by(AuditLogEntry.seq))).scalars().all()
+        target = rows[0]
+        target.reason = "tampered after the fact"
+        await session.commit()
+        tampered_seq = target.seq
+
+    tampered = await backend_client.get("/audit-log/verify")
+    body = tampered.json()
+    assert body["valid"] is False
+    assert body["broken_at_seq"] == tampered_seq
+
+
 async def test_every_triage_flag_has_rationale_confidence_and_source(gateway_client, seeded_case_file_id):
     listing = await gateway_client.post(
         "/gateway/artifacts/list", params={"case_file_id": seeded_case_file_id}
