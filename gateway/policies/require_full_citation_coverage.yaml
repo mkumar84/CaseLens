@@ -1,0 +1,18 @@
+apiVersion: agentgateway.io/v1
+kind: AgentgatewayPolicy
+metadata:
+  name: require-full-citation-coverage
+spec:
+  target:
+    resource: report-draft
+    action: transition-status
+    to: "case_ready"
+  # NOTE: adjusted to `100.0` (not `100`) per CLAUDE.md's build note — CEL is
+  # strictly typed and citation_coverage_pct is stored/exposed as a double;
+  # celpy has no double==int overload. Semantics are unchanged.
+  rule:
+    cel: "resource.citation_coverage_pct == 100.0"
+  onDeny:
+    reason: "Report cannot become case-ready: citation coverage below 100%."
+    log: true
+    includeUnsourcedClaims: true

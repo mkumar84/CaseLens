@@ -1,0 +1,13 @@
+apiVersion: agentgateway.io/v1
+kind: AgentgatewayPolicy
+metadata:
+  name: require-human-approval
+spec:
+  target:
+    agent: timeline-agent
+    action: read-artifact
+  rule:
+    cel: "resource.triage_flag.status == 'approved'"
+  onDeny:
+    reason: "Artifact not human-approved; Timeline Agent may not consume it."
+    log: true
