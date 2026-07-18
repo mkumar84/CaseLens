@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from backend.app.routers import agents, artifacts, audit, case_files, dev, reports, timeline, triage
-from scripts.seed import seed
+from scripts.seed import seed_all
 from shared.db.models import CaseFile
 from shared.db.session import init_db, session_scope
 
@@ -21,7 +21,9 @@ async def lifespan(app: FastAPI):
         # isn't a fair prerequisite for someone just pulling up the live
         # URL). Only fires against a genuinely empty DB, so redeploys
         # against an already-seeded database don't create duplicates.
-        await seed()
+        # Seeds every demo scenario in db/seed_data.py, not just one, so a
+        # fresh deploy shows range rather than a single case.
+        await seed_all()
     yield
 
 

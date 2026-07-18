@@ -7,11 +7,12 @@ Report Agent reaching case_ready -> a deliberately-noncompliant Report Agent
 blocked by Policy 2 -> the full policy-decision and audit trail.
 
 Usage: python -m scripts.demo
-Starts its own gateway + backend uvicorn processes on 127.0.0.1:8001/8000,
-seeds a fresh CaseFile, runs the narrative, and shuts everything down. Runs
-in well under 5 minutes; most of that is Claude API latency if
-ANTHROPIC_API_KEY is set, or near-instant if it falls back to the offline
-heuristics (see agents/heuristics.py).
+Starts its own gateway + backend uvicorn processes on 127.0.0.1:8001/8000
+(auto-seeding every demo scenario against the fresh, empty demo.db), runs
+the narrative against the Trussell & Voss scenario specifically, and shuts
+everything down. Runs in well under 5 minutes; most of that is Claude API
+latency if ANTHROPIC_API_KEY is set, or near-instant if it falls back to
+the offline heuristics (see agents/heuristics.py).
 """
 
 import os
@@ -80,15 +81,20 @@ def main() -> None:
         client = httpx.Client(timeout=30)
 
         banner("Step 1 — Synthetic mixed CaseFile")
-        from db.seed_data import ARTIFACTS
+        from db.seed_data import ARTIFACTS, CASE_FILE_NAME
 
-        # backend/app/main.py's lifespan auto-seeds one CaseFile on startup
-        # against an empty database (the same behavior the deployed Railway
-        # app relies on so a fresh URL always has demo data ready). Reuse
-        # it here instead of also creating one directly — doing both would
-        # leave two duplicate-looking case files sitting in demo.db.
+        # backend/app/main.py's lifespan auto-seeds every scenario in
+        # db/seed_data.py on startup against an empty database (the same
+        # behavior the deployed Railway app relies on so a fresh URL always
+        # has demo data ready). Reuse the Trussell & Voss one here instead
+        # of also creating a case directly — and select it BY NAME, not by
+        # position: GET /case-files orders newest-first, so whichever
+        # scenario seed_all() seeds last would silently become
+        # case_files[0], changing which case this script's fixed narrative
+        # (a specific rejected flag, a specific misbehaving-report claim)
+        # runs against.
         case_files = client.get(f"{BACKEND_URL}/case-files").json()
-        case_file = case_files[0]
+        case_file = next(cf for cf in case_files if cf["name"] == CASE_FILE_NAME)
         case_file_id = case_file["id"]
         print(f"Case file (auto-seeded on backend startup): {case_file['name']} ({case_file_id})")
         print(f"{len(ARTIFACTS)} artifacts (documents, device extraction, comms).")
