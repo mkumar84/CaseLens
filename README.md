@@ -127,22 +127,31 @@ Both are optional for local development:
 
 ## Running it
 
-The backend auto-seeds one synthetic CaseFile on startup if the database is
-empty (`backend/app/main.py`'s `lifespan`), so a fresh deploy — including
-the live Railway URL — always has demo data with zero manual steps. It only
-fires against a genuinely empty database, so redeploying against an
-already-seeded one doesn't create duplicates. Manual seeding is still
-available if you want it explicitly:
+`db/seed_data.py` defines three synthetic mixed CaseFile scenarios (vendor
+payment fraud, a departing-employee IP review, falsified inspection
+records) — small enough to review in a demo, each roughly half
+investigatively relevant and half routine noise. The backend auto-seeds
+**all three** on startup if the database is empty (`backend/app/main.py`'s
+`lifespan`, via `scripts.seed.seed_all()`), so a fresh deploy — including
+the live Railway URL — always has demo data with zero manual steps and
+some range to browse. It only fires against a genuinely empty database, so
+redeploying against an already-seeded one doesn't create duplicates.
+Manual seeding is still available if you want it explicitly:
 
 ```bash
-python -m scripts.seed                                        # seed one CaseFile, 18 artifacts
+python -m scripts.seed                                        # seed all 3 scenarios
+python -m scripts.seed 1                                      # seed only CASES[1] (Vantage Robotics)
 uvicorn gateway.main:app --port 8001 &
-uvicorn backend.app.main:app --port 8000 &                     # also auto-seeds if the DB is empty
+uvicorn backend.app.main:app --port 8000 &                     # also auto-seeds all 3 if the DB is empty
 ```
 
 Then either drive it through the API (see below) or run the scripted
-walkthrough, which starts its own gateway/backend processes, seeds its own
-case file, and runs the full narrative in one shot:
+walkthrough, which starts its own gateway/backend processes (auto-seeding
+all three scenarios against the fresh demo database) and runs the full
+narrative against the Trussell & Voss scenario specifically — selected by
+name, not by list position, since `GET /case-files` orders newest-first
+and seeding three scenarios means the "first" one returned is whichever
+was seeded last, not necessarily this one:
 
 ```bash
 python -m scripts.demo
@@ -176,13 +185,16 @@ Claude API latency if a key is set).
 | `POST` | `/agents/report/run?case_file_id=` | run (compliant) Report Agent |
 | `POST` | `/agents/report/run-misbehaving?case_file_id=` | run the noncompliant variant + attempt case_ready |
 | `POST` | `/agents/report/{id}/request-case-ready` | request the case_ready transition |
-| `POST` | `/dev/seed` | seed another case file on demand (demo-only, see below) |
+| `POST` | `/dev/seed` | seed one more case file on demand, randomly chosen from the 3 scenarios (demo-only, see below) |
+| `POST` | `/dev/seed?with_triage=true` | same, then immediately runs the Triage Agent against it so it arrives with real `pending` flags |
 
 `/dev/seed` is a portfolio-demo convenience, not a production pattern —
 unauthenticated and unrate-limited. It's there so a demo run-through can be
 reset to a clean state (a fresh set of `pending` flags to approve/reject)
 without a full redeploy; it adds a new case file rather than overwriting,
-so it's safe to call repeatedly.
+so it's safe to call repeatedly. `with_triage=true` stops after triage
+deliberately — chaining straight through to Timeline/Report would skip the
+human approve/reject step the whole system exists to require.
 
 ## Tests
 
