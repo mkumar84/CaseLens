@@ -10,10 +10,9 @@ router = APIRouter(prefix="/dev", tags=["dev"])
 async def reseed(with_triage: bool = False):
     """Portfolio-demo convenience, not a production pattern: unauthenticated,
     unrate-limited on-demand reseeding. A multi-tenant version of this
-    endpoint would need both. Safe to call repeatedly — adds a new case file
-    each time (randomly chosen from the demo scenarios) rather than
-    overwriting, so existing demo state from a prior run-through is
-    preserved unless manually cleared.
+    endpoint would need both. Each call adds one new case file. Prefers a
+    scenario not already represented in the database, so repeated calls
+    cover all demo scenarios once each before ever repeating one.
 
     with_triage=true additionally runs the Triage Agent against the new
     case immediately, so it arrives with real flags ready for human
