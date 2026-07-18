@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, ForeignKey, Numeric, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -22,7 +22,7 @@ class CaseFile(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     status: Mapped[str] = mapped_column(String(20), default="open")  # open | case_ready | closed
 
 
@@ -34,7 +34,7 @@ class Artifact(Base):
     source_type: Mapped[str] = mapped_column(String(20))  # document | device | comms
     raw_content: Mapped[str] = mapped_column(Text)
     artifact_metadata: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class TriageFlag(Base):
@@ -46,8 +46,8 @@ class TriageFlag(Base):
     confidence_score: Mapped[float] = mapped_column(Numeric(4, 3))
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | approved | rejected
     reviewed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class TimelineEntry(Base):
@@ -56,10 +56,10 @@ class TimelineEntry(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     case_file_id: Mapped[str] = mapped_column(ForeignKey("case_files.id"))
     artifact_id: Mapped[str] = mapped_column(ForeignKey("artifacts.id"))
-    event_timestamp: Mapped[datetime] = mapped_column()
+    event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     event_description: Mapped[str] = mapped_column(Text)
     created_by_agent: Mapped[str] = mapped_column(String(100), default="timeline-agent")
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class ReportDraft(Base):
@@ -71,8 +71,8 @@ class ReportDraft(Base):
     citations: Mapped[list] = mapped_column(JSON, default=list)  # [{claim_id, artifact_id, claim_text}]
     citation_coverage_pct: Mapped[float] = mapped_column(Numeric(5, 2), default=0)
     status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | case_ready | blocked
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class AuditLogEntry(Base):
@@ -86,7 +86,7 @@ class AuditLogEntry(Base):
     decision: Mapped[str] = mapped_column(String(10))  # allow | deny
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_id: Mapped[str] = mapped_column(String(64))
-    timestamp: Mapped[datetime] = mapped_column(default=utcnow)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     # Tamper-evident hash chain (PRD Goal #4). seq is the append order;
     # entry_hash binds this row to every row before it via prev_hash, so an
@@ -106,4 +106,4 @@ class PolicyDecisionLog(Base):
     decision: Mapped[str] = mapped_column(String(10))  # allow | deny
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_id: Mapped[str] = mapped_column(String(64))
-    timestamp: Mapped[datetime] = mapped_column(default=utcnow)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
