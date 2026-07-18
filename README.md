@@ -185,7 +185,7 @@ Claude API latency if a key is set).
 | `POST` | `/agents/report/run?case_file_id=` | run (compliant) Report Agent |
 | `POST` | `/agents/report/run-misbehaving?case_file_id=` | run the noncompliant variant + attempt case_ready |
 | `POST` | `/agents/report/{id}/request-case-ready` | request the case_ready transition |
-| `POST` | `/dev/seed` | seed one more case file on demand, randomly chosen from the 3 scenarios (demo-only, see below) |
+| `POST` | `/dev/seed` | seed one more case file on demand — prefers a scenario not already in the database, falling back to random once all 3 exist (demo-only, see below) |
 | `POST` | `/dev/seed?with_triage=true` | same, then immediately runs the Triage Agent against it so it arrives with real `pending` flags |
 
 `/dev/seed` is a portfolio-demo convenience, not a production pattern —

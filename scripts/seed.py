@@ -10,6 +10,8 @@ import random
 import sys
 from pathlib import Path
 
+from sqlalchemy import select
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from db.seed_data import CASES
@@ -18,9 +20,26 @@ from shared.db.session import init_db, session_scope
 
 
 async def seed_one(index: int | None = None) -> str:
-    """Seed a single case scenario. Random choice from CASES if index is None."""
+    """Seed a single case scenario.
+
+    If index is given, seeds that specific CASES entry. Otherwise, prefers
+    a scenario whose name doesn't already exist among current case files —
+    so repeated calls naturally cover all scenarios once each before ever
+    repeating one. Only falls back to a fully random choice (including
+    repeats) once every scenario is already represented in the database.
+    """
     await init_db()
-    scenario = CASES[index] if index is not None else random.choice(CASES)
+
+    if index is not None:
+        scenario = CASES[index]
+    else:
+        async with session_scope() as session:
+            existing_names = set(
+                (await session.execute(select(CaseFile.name))).scalars().all()
+            )
+        unseeded = [c for c in CASES if c["name"] not in existing_names]
+        scenario = random.choice(unseeded) if unseeded else random.choice(CASES)
+
     async with session_scope() as session:
         case_file = CaseFile(name=scenario["name"], status="open")
         session.add(case_file)
